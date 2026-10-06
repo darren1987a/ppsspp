@@ -451,7 +451,7 @@ void LogoScreen::DrawForeground(UIContext &dc) {
 	const float startY = bounds.centerY() - 70;
 
 	// Manually formatting UTF-8 is fun.  \xXX doesn't work everywhere.
-	snprintf(temp, sizeof(temp), "%s Henrik Rydg%c%crd", cr->T_cstr("created", "Created by"), 0xC3, 0xA5);
+	snprintf(temp, sizeof(temp), "Modified by Darren Huang");
 	if (System_GetPropertyBool(SYSPROP_APP_GOLD)) {
 		UI::DrawIconShine(dc, Bounds::FromCenter(bounds.centerX() - 125, startY, 60.0f), 0.7f, true);
 		dc.Draw()->DrawImage(ImageID("I_ICON_GOLD"), bounds.centerX() - 125, startY, 1.2f, 0xFFFFFFFF, ALIGN_CENTER);
@@ -463,9 +463,9 @@ void LogoScreen::DrawForeground(UIContext &dc) {
 	dc.SetFontScale(1.0f, 1.0f);
 	dc.SetFontStyle(dc.GetTheme().uiFont);
 	dc.DrawText(temp, bounds.centerX(), startY + 70, textColor, ALIGN_CENTER);
-	dc.DrawText(cr->T_cstr("license", "Free Software under GPL 2.0+"), bounds.centerX(), startY + 110, textColor, ALIGN_CENTER);
-
-	dc.DrawText("www.ppsspp.org", bounds.centerX(), startY + 160, textColor, ALIGN_CENTER);
+	// GPL 2.0 section 2(c): keep a notice for the original authors.
+	dc.DrawText("Based on PPSSPP by Henrik Rydg\xc3\xa5rd and contributors", bounds.centerX(), startY + 110, textColor, ALIGN_CENTER);
+	dc.DrawText(cr->T_cstr("license", "Free Software under GPL 2.0+"), bounds.centerX(), startY + 150, textColor, ALIGN_CENTER);
 
 #if !PPSSPP_PLATFORM(UWP) || defined(_DEBUG)
 	// Draw the graphics API, except on UWP where it's always D3D11
@@ -553,42 +553,6 @@ void CreditsScreen::CreateDialogViews(UI::ViewGroup *parent) {
 		right = columns->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(columnWidth, FILL_PARENT, Margins(10))));
 		right->Add(new Spacer(0.0f, new LinearLayoutParams(1.0f)));
 	}
-
-	int rightYOffset = 0;
-	if (!System_GetPropertyBool(SYSPROP_APP_GOLD)) {
-		ScreenManager *sm = screenManager();
-		Choice *gold = new Choice(mm->T("Buy PPSSPP Gold"));
-		gold->SetIconRight(ImageID("I_ICON_GOLD"), 0.5f);
-		gold->SetImageScale(0.6f);  // for the left-icon in case of vertical.
-		gold->SetShine(true);
-
-		left->Add(gold)->OnClick.Add([sm](UI::EventParams) {
-			LaunchBuyGold(sm);
-		});
-		rightYOffset = 74;
-	}
-	left->Add(new Choice(cr->T("PPSSPP Forums"), ImageID("I_LINK_OUT")))->OnClick.Add([](UI::EventParams &e) {
-		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://forums.ppsspp.org");
-	});
-	left->Add(new Choice(cr->T("Discord"), ImageID("I_LOGO_DISCORD")))->OnClick.Add([](UI::EventParams &e) {
-		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://discord.gg/5NJB6dD");
-	});
-	left->Add(new Choice("www.ppsspp.org", ImageID("I_LINK_OUT")))->OnClick.Add([](UI::EventParams &e) {
-		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org");
-	});
-	right->Add(new Choice(cr->T("Privacy Policy"), ImageID("I_LINK_OUT")))->OnClick.Add([](UI::EventParams &e) {
-		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org/privacy");
-	});
-	right->Add(new Choice(cr->T("@PPSSPP_emu"), ImageID("I_LOGO_X")))->OnClick.Add([](UI::EventParams &e) {
-		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://x.com/PPSSPP_emu");
-	});
-
-	if (System_GetPropertyBool(SYSPROP_SUPPORTS_SHARE_TEXT)) {
-		right->Add(new Choice(cr->T("Share PPSSPP"), ImageID("I_SHARE")))->OnClick.Add([](UI::EventParams &e) {
-			auto cr = GetI18NCategory(I18NCat::PSPCREDITS);
-			System_ShareText(cr->T("CheckOutPPSSPP", "Check out PPSSPP, the awesome PSP emulator: https://www.ppsspp.org/"));
-		});
-	}
 }
 
 void CreditsScreen::update() {
@@ -627,74 +591,14 @@ void CreditsScroller::Draw(UIContext &dc) {
 		cr->T("title", "A fast and portable PSP emulator"),
 		"",
 		"",
-		cr->T("created", "Created by"),
-		"Henrik Rydg\xc3\xa5rd",
+		"Modified by",
+		"Darren Huang",
 		"",
 		"",
-		cr->T("contributors", "Contributors:"),
-		"unknownbrackets",
-		"oioitff",
-		"xsacha",
-		"raven02",
-		"tpunix",
-		"orphis",
-		"sum2012",
-		"mikusp",
-		"aquanull",
-		"The Dax",
-		"bollu",
-		"tmaul",
-		"artart78",
-		"ced2911",
-		"soywiz",
-		"kovensky",
-		"xele",
-		"chaserhjk",
-		"evilcorn",
-		"daniel dressler",
-		"makotech222",
-		"CPkmn",
-		"mgaver",
-		"jeid3",
-		"cinaera/BeaR",
-		"jtraynham",
-		"Kingcom",
-		"arnastia",
-		"lioncash",
-		"JulianoAmaralChaves",
-		"vnctdj",
-		"kaienfr",
-		"shenweip",
-		"Danyal Zia",
-		"Igor Calabria",
-		"Coldbird",
-		"Kyhel",
-		"xebra",
-		"LunaMoo",
-		"zminhquanz",
-		"ANR2ME",
-		"adenovan",
-		"iota97",
-		"Lubos",
-		"stenzek",  // For retroachievements integration
-		"fp64",
+		"Based on PPSSPP by",
+		"Henrik Rydg\xc3\xa5rd and contributors",
+		cr->T("license", "Free Software under GPL 2.0+"),
 		"",
-		cr->T("specialthanks", "Special thanks to:"),
-		specialthanksMaxim,
-		specialthanksKeithGalocy,
-		specialthanksOrphis,
-		specialthanksangelxwind,
-		specialthanksW_MS,
-		specialthankssolarmystic,
-		cr->T("all the forum mods"),
-		"",
-		cr->T("this translation by", ""),   // Empty string as this is the original :)
-		cr->T("translators1", ""),
-		cr->T("translators2", ""),
-		cr->T("translators3", ""),
-		cr->T("translators4", ""),
-		cr->T("translators5", ""),
-		cr->T("translators6", ""),
 		"",
 		cr->T("written", "Written in C++ for speed and portability"),
 		"",
@@ -720,15 +624,6 @@ void CreditsScroller::Draw(UIContext &dc) {
 		"xxhash",
 		"naett-http",
 		"PSP SDK",
-		"",
-		"",
-		cr->T("website", "Check out the website:"),
-		"www.ppsspp.org",
-		cr->T("list", "compatibility lists, forums, and development info"),
-		"",
-		"",
-		cr->T("check", "Also check out Dolphin, the best Wii/GC emu around:"),
-		"https://www.dolphin-emu.org",
 		"",
 		"",
 		cr->T("info1", "PPSSPP is only intended to play games you own."),
