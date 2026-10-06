@@ -1,3 +1,4 @@
+#include <chrono>
 #include <string>
 #include <thread>
 
@@ -10,6 +11,8 @@
 #include "Common/File/Path.h"
 #include "Core/Util/CloudSaveZip.h"
 #include "Core/Util/CloudSaveState.h"
+#include "Core/Util/CloudSaveClient.h"
+#include "Core/Config.h"
 
 #include "UnitTest.h"
 
@@ -214,6 +217,85 @@ static bool TestCloudSaveStateFile() {
 	return true;
 }
 
+static bool TestCloudSaveEnvelope() {
+	CloudSave::ApiError err;
+	EXPECT_TRUE(CloudSave::ParseEnvelope(R"({"code":200,"data":[],"msg":""})", &err));
+	// Error helper default: code 200 but no data key. Must be an error.
+	EXPECT_FALSE(CloudSave::ParseEnvelope(R"({"code":200,"msg":"boom"})", &err));
+	EXPECT_EQ_STR(err.message, std::string("boom"));
+	// Unknown route: code is a string, message under "message".
+	EXPECT_FALSE(CloudSave::ParseEnvelope(R"({"code":"404","message":"not found"})", &err));
+	EXPECT_EQ_STR(err.message, std::string("not found"));
+	EXPECT_FALSE(CloudSave::ParseEnvelope(R"({"code":6401,"message":"token is expired"})", &err));
+	EXPECT_TRUE(err.Unauthorized());
+	EXPECT_FALSE(CloudSave::ParseEnvelope("not json", &err));
+	EXPECT_FALSE(CloudSave::ParseEnvelope("", &err));
+
+	std::string jwt;
+	EXPECT_TRUE(CloudSave::ParseLogin(R"({"code":200,"token":"abc.def","expire":"2026-11-05T10:00:00+08:00"})", &jwt, &err));
+	EXPECT_EQ_STR(jwt, std::string("abc.def"));
+	EXPECT_FALSE(CloudSave::ParseLogin(R"({"code":400,"message":"incorrect Username or Password"})", &jwt, &err));
+	EXPECT_EQ_STR(err.message, std::string("incorrect Username or Password"));
+
+	std::string token;
+	EXPECT_TRUE(CloudSave::ParseRegister(R"({"code":200,"data":{"deviceId":3,"token":"dsv_xyz"},"msg":""})", &token, &err));
+	EXPECT_EQ_STR(token, std::string("dsv_xyz"));
+	return true;
+}
+
+static bool TestCloudSaveParseLists() {
+	CloudSave::ApiError err;
+	std::vector<CloudSave::CloudSaveInfo> saves;
+	EXPECT_TRUE(CloudSave::ParseSaveList(R"({"code":200,"msg":"","data":[
+		{"saveId":"ULUS10336DATA00","gameId":"ULUS10336","title":"Crisis Core","versionCount":2,
+		 "latest":{"version":2,"size":1234,"sha256":"aaa","deviceName":"iPad","uploadedAt":"2026-10-06T10:00:00+08:00"}}]})", &saves, &err));
+	EXPECT_EQ_INT((int)saves.size(), 1);
+	EXPECT_EQ_STR(saves[0].saveId, std::string("ULUS10336DATA00"));
+	EXPECT_EQ_INT(saves[0].latest.version, 2);
+	EXPECT_EQ_STR(saves[0].latest.deviceName, std::string("iPad"));
+	// null data is an empty list
+	EXPECT_TRUE(CloudSave::ParseSaveList(R"({"code":200,"data":null,"msg":""})", &saves, &err));
+	EXPECT_EQ_INT((int)saves.size(), 0);
+
+	std::vector<CloudSave::CloudVersion> versions;
+	EXPECT_TRUE(CloudSave::ParseVersionList(R"({"code":200,"msg":"","data":[
+		{"version":2,"size":10,"sha256":"bbb","deviceName":"iPad","uploadedAt":"t2"},
+		{"version":1,"size":9,"sha256":"aaa","deviceName":"Mac","uploadedAt":"t1"}]})", &versions, &err));
+	EXPECT_EQ_INT((int)versions.size(), 2);
+	EXPECT_EQ_INT(versions[1].version, 1);
+
+	CloudSave::UploadResult ok = CloudSave::ParseUpload(R"({"code":200,"data":{"version":5},"msg":""})");
+	EXPECT_TRUE(ok.outcome == CloudSave::UploadOutcome::Ok);
+	EXPECT_EQ_INT(ok.version, 5);
+	CloudSave::UploadResult conflict = CloudSave::ParseUpload(R"({"code":409,"msg":"conflict","data":{"latest":{"version":7,"sha256":"ccc","deviceName":"iPad","uploadedAt":"t7"}}})");
+	EXPECT_TRUE(conflict.outcome == CloudSave::UploadOutcome::Conflict);
+	EXPECT_EQ_INT(conflict.latest.version, 7);
+	EXPECT_EQ_STR(conflict.latest.deviceName, std::string("iPad"));
+	CloudSave::UploadResult tooBig = CloudSave::ParseUpload(R"({"code":413,"msg":"too large"})");
+	EXPECT_TRUE(tooBig.outcome == CloudSave::UploadOutcome::Failed);
+	EXPECT_EQ_INT(tooBig.error.code, 413);
+	return true;
+}
+
+// A callback must not run after its Client is destroyed (the screen may close mid-request).
+static bool TestCloudSaveClientAlive() {
+	bool called = false;
+	{
+		CloudSave::Client client("http://127.0.0.1:1/api/v1", "dsv_test");  // port 1: connection refused
+		client.ListSaves("ULUS10336", [&called](bool, const std::vector<CloudSave::CloudSaveInfo> &, const CloudSave::ApiError &) {
+			called = true;
+		});
+	}
+	// Drain the request manager like the main loop does.
+	for (int i = 0; i < 200; i++) {
+		g_DownloadManager.Update();
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	g_DownloadManager.CancelAll();
+	EXPECT_FALSE(called);
+	return true;
+}
+
 bool TestCloudSave() {
 	if (!TestCloudSaveHttpHeaders())
 		return false;
@@ -230,6 +312,12 @@ bool TestCloudSave() {
 	if (!TestCloudSaveStatus())
 		return false;
 	if (!TestCloudSaveStateFile())
+		return false;
+	if (!TestCloudSaveEnvelope())
+		return false;
+	if (!TestCloudSaveParseLists())
+		return false;
+	if (!TestCloudSaveClientAlive())
 		return false;
 	return true;
 }

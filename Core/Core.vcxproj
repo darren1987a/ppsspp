@@ -908,6 +908,7 @@
     <ClCompile Include="Util\GameManager.cpp" />
     <ClCompile Include="Util\MemStick.cpp" />
     <ClCompile Include="Util\PathUtil.cpp" />
+    <ClCompile Include="Util\CloudSaveClient.cpp" />
     <ClCompile Include="Util\CloudSaveState.cpp" />
     <ClCompile Include="Util\CloudSaveZip.cpp" />
     <ClCompile Include="Util\PortManager.cpp" />
@@ -1265,6 +1266,7 @@
     <ClInclude Include="Util\GameManager.h" />
     <ClInclude Include="Util\MemStick.h" />
     <ClInclude Include="Util\PathUtil.h" />
+    <ClInclude Include="Util\CloudSaveClient.h" />
     <ClInclude Include="Util\CloudSaveState.h" />
     <ClInclude Include="Util\CloudSaveZip.h" />
     <ClInclude Include="Util\PortManager.h" />
