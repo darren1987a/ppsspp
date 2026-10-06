@@ -693,6 +693,8 @@ add_library(Core STATIC
 	Util/GameDB.h
 	Util/PathUtil.cpp
 	Util/PathUtil.h
+	Util/CloudSaveClient.cpp
+	Util/CloudSaveClient.h
 	Util/CloudSaveState.cpp
 	Util/CloudSaveState.h
 	Util/CloudSaveZip.cpp
