@@ -1,6 +1,8 @@
 #include <algorithm>
 
 #include "Common/Data/Text/I18n.h"
+#include "Common/File/DirListing.h"
+#include "Common/File/FileUtil.h"
 #include "Common/StringUtils.h"
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
@@ -36,6 +38,8 @@ CloudSaveScreen::CloudSaveScreen(const Path &gamePath)
 	username_ = state_.username;
 	deviceName_ = state_.deviceName;
 	deviceToken_ = NativeLoadSecret(SECRET_NAME);
+	if (!deviceToken_.empty())
+		client_ = std::make_unique<CloudSave::Client>(state_.serverUrl, deviceToken_);
 
 	std::shared_ptr<GameInfo> info = g_gameInfoCache->GetInfo(nullptr, gamePath_, GameInfoFlags::PARAM_SFO);
 	if (info && info->Ready(GameInfoFlags::PARAM_SFO)) {
@@ -71,24 +75,35 @@ void CloudSaveScreen::LogOut() {
 	rows_.clear();
 }
 
-// Hashes every local save folder of this game.
+// Hashes every local save folder of this game. Reads the disk directly rather than GameInfoCache,
+// which may not be ready again yet after a download clears it.
 void CloudSaveScreen::LoadLocal() {
 	rows_.clear();
-	std::shared_ptr<GameInfo> info = g_gameInfoCache->GetInfo(nullptr, gamePath_, GameInfoFlags::PARAM_SFO);
-	if (!info || !info->Ready(GameInfoFlags::PARAM_SFO))
-		return;
-	for (const Path &dir : info->GetSaveDataDirectories()) {
+	std::vector<File::FileInfo> dirs;
+	File::GetFilesInDir(GetSysDirectory(DIRECTORY_SAVEDATA), &dirs, nullptr, 0, gameId_);
+	for (const auto &dir : dirs) {
+		if (!dir.isDirectory || !CloudSave::IsValidSaveId(dir.name))
+			continue;  // e.g. a leftover ".bak" or ".cloudtmp"
 		Row row;
-		row.saveId = dir.GetFilename();
-		if (!CloudSave::IsValidSaveId(row.saveId))
-			continue;  // e.g. a leftover ".bak"
+		row.saveId = dir.name;
 		row.title = gameTitle_;
-		if (!CloudSave::ZipSaveFolder(dir, &row.localZip))
-			continue;
 		row.hasLocal = true;
-		row.localSha256 = CloudSave::Sha256Hex(row.localZip);
+		if (CloudSave::ZipSaveFolder(dir.fullName, &row.localZip)) {
+			row.localSha256 = CloudSave::Sha256Hex(row.localZip);
+		} else {
+			row.localReadable = false;
+		}
 		rows_.push_back(row);
 	}
+}
+
+bool CloudSaveScreen::DownloadNeedsConfirm(const std::string &saveId, const std::string &chosenSha256) {
+	const Path dir = GetSysDirectory(DIRECTORY_SAVEDATA) / saveId;
+	const bool exists = File::Exists(dir);
+	std::string zip;
+	const bool readable = exists && CloudSave::ZipSaveFolder(dir, &zip);
+	const std::string sha = readable ? CloudSave::Sha256Hex(zip) : "";
+	return CloudSave::NeedsOverwriteConfirm(exists, readable, sha, state_.bases[saveId], chosenSha256);
 }
 
 void CloudSaveScreen::Refresh() {
@@ -96,11 +111,15 @@ void CloudSaveScreen::Refresh() {
 		SetMessage("Couldn't read this game's ID.");
 		return;
 	}
+	if (!client_)
+		return;
 	LoadLocal();
-	client_ = std::make_unique<CloudSave::Client>(state_.serverUrl, deviceToken_);
 	loading_ = true;
 	message_.clear();
-	client_->ListSaves(gameId_, [this](bool ok, const std::vector<CloudSave::CloudSaveInfo> &saves, const CloudSave::ApiError &err) {
+	const int generation = ++refreshGeneration_;
+	client_->ListSaves(gameId_, [this, generation](bool ok, const std::vector<CloudSave::CloudSaveInfo> &saves, const CloudSave::ApiError &err) {
+		if (generation != refreshGeneration_)
+			return;  // a newer Refresh() is in flight
 		loading_ = false;
 		if (!ok) {
 			HandleError(err);
@@ -127,6 +146,8 @@ void CloudSaveScreen::Refresh() {
 }
 
 void CloudSaveScreen::UploadRow(const Row &row, bool force) {
+	if (!client_ || !row.hasLocal || !row.localReadable)
+		return;  // e.g. signed out while a conflict prompt was open
 	const std::string saveId = row.saveId;
 	const std::string sha = row.localSha256;
 	client_->Upload(saveId, row.title, row.localZip, state_.bases[saveId].version, force, [this, saveId, sha, row](const CloudSave::UploadResult &result) {
@@ -154,7 +175,7 @@ void CloudSaveScreen::UploadRow(const Row &row, bool force) {
 
 void CloudSaveScreen::UploadAll() {
 	for (const Row &row : rows_) {
-		if (!row.hasLocal)
+		if (!row.hasLocal || !row.localReadable)
 			continue;
 		if (row.status == CloudSave::SyncStatus::LocalNewer || row.status == CloudSave::SyncStatus::LocalOnly) {
 			UploadRow(row, false);
@@ -165,6 +186,8 @@ void CloudSaveScreen::UploadAll() {
 }
 
 void CloudSaveScreen::ChooseVersionAndDownload(const std::string &saveId) {
+	if (!client_)
+		return;
 	client_->ListVersions(saveId, [this, saveId](bool ok, const std::vector<CloudSave::CloudVersion> &versions, const CloudSave::ApiError &err) {
 		if (!ok) {
 			HandleError(err);
@@ -182,10 +205,8 @@ void CloudSaveScreen::ChooseVersionAndDownload(const std::string &saveId) {
 			if (index < 0 || index >= (int)versions.size())
 				return;
 			const CloudSave::CloudVersion chosen = versions[index];
-			auto it = std::find_if(rows_.begin(), rows_.end(), [&](const Row &r) { return r.saveId == saveId; });
-			const bool localChanged = it != rows_.end() &&
-				(it->status == CloudSave::SyncStatus::LocalNewer || it->status == CloudSave::SyncStatus::Conflict);
-			if (localChanged) {
+			// Decide from what is on disk now, not from a row status that may be stale.
+			if (DownloadNeedsConfirm(saveId, chosen.sha256)) {
 				screenManager()->push(new UI::MessagePopupScreen("Overwrite local save?",
 					"This device has changes that aren't in the cloud. Replace them with the downloaded version?",
 					"Replace", "Cancel", [this, saveId, chosen](bool yes) {
@@ -200,6 +221,8 @@ void CloudSaveScreen::ChooseVersionAndDownload(const std::string &saveId) {
 }
 
 void CloudSaveScreen::DownloadVersion(const std::string &saveId, const CloudSave::CloudVersion &version) {
+	if (!client_)
+		return;
 	client_->Download(saveId, version.version, [this, saveId, version](bool ok, const std::string &zipData, const CloudSave::ApiError &err) {
 		if (!ok) {
 			HandleError(err);
@@ -250,6 +273,7 @@ void CloudSaveScreen::CreateDialogViews(UI::ViewGroup *parent) {
 				}
 				deviceToken_ = token;
 				NativeSaveSecret(SECRET_NAME, token);
+				client_ = std::make_unique<CloudSave::Client>(state_.serverUrl, deviceToken_);
 				state_.username = username_;
 				state_.deviceName = deviceName_;
 				state_.Save(CloudSave::SyncStateFile());
@@ -268,7 +292,7 @@ void CloudSaveScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	Choice *uploadAll = parent->Add(new Choice("Upload all"));
 	uploadAll->SetEnabledFunc([this] {
 		return std::any_of(rows_.begin(), rows_.end(), [](const Row &r) {
-			return r.status == CloudSave::SyncStatus::LocalNewer || r.status == CloudSave::SyncStatus::LocalOnly || r.status == CloudSave::SyncStatus::Conflict;
+			return r.localReadable && (r.status == CloudSave::SyncStatus::LocalNewer || r.status == CloudSave::SyncStatus::LocalOnly || r.status == CloudSave::SyncStatus::Conflict);
 		});
 	});
 	uploadAll->OnClick.Add([this](EventParams &) { UploadAll(); });
@@ -278,8 +302,8 @@ void CloudSaveScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	}
 	for (const Row &row : rows_) {
 		parent->Add(new ItemHeader(row.saveId));
-		parent->Add(new TextView(StatusLabel(row.status), ALIGN_LEFT, false));
-		if (row.hasLocal) {
+		parent->Add(new TextView(row.localReadable ? StatusLabel(row.status) : "Can't read the local save", ALIGN_LEFT, false));
+		if (row.hasLocal && row.localReadable) {
 			const std::string saveId = row.saveId;
 			parent->Add(new Choice("Upload"))->OnClick.Add([this, saveId](EventParams &) {
 				auto it = std::find_if(rows_.begin(), rows_.end(), [&](const Row &r) { return r.saveId == saveId; });
