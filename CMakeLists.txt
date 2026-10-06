@@ -3192,6 +3192,7 @@ if(IOS AND NOT LIBRETRO)
 		)
 		set_target_properties(${TargetBin} PROPERTIES
 			XCODE_GENERATE_SCHEME YES  # Avoid the scheme bloat in XCode by only setting it to YES for this target.
+			XCODE_SCHEME_LAUNCH_CONFIGURATION Release  # Run from Xcode optimized; Debug (-O0) is several times slower.
 			RESOURCE "ios/Launch Screen.storyboard"
 			RESOURCE "ios/Settings.bundle"
 			RESOURCE "ios/assets.xcassets"
