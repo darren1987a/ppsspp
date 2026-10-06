@@ -116,6 +116,10 @@ static bool TestCloudSaveExtractRoundTrip() {
 	EXPECT_TRUE(File::ReadBinaryFileToString(dest / "ULUS10336DATA00" / "sub" / "ICON0.PNG", &data));
 	EXPECT_EQ_STR(data, std::string("icon"));
 	EXPECT_FALSE(File::Exists(dest / "ULUS10336DATA00" / "OLD.BIN"));
+	// Re-zipping what was extracted gives the same bytes, so status after a download is "Synced".
+	std::string rezipped;
+	EXPECT_TRUE(CloudSave::ZipSaveFolder(dest / "ULUS10336DATA00", &rezipped));
+	EXPECT_EQ_STR(CloudSave::Sha256Hex(rezipped), CloudSave::Sha256Hex(zip));
 	EXPECT_FALSE(File::Exists(dest / "ULUS10336DATA00.bak"));
 	EXPECT_FALSE(File::Exists(dest / "ULUS10336DATA00.cloudtmp"));
 	File::DeleteDirRecursively(root);
@@ -228,6 +232,8 @@ static bool TestCloudSaveEnvelope() {
 	EXPECT_EQ_STR(err.message, std::string("not found"));
 	EXPECT_FALSE(CloudSave::ParseEnvelope(R"({"code":6401,"message":"token is expired"})", &err));
 	EXPECT_TRUE(err.Unauthorized());
+	// A string code is never success, even "200".
+	EXPECT_FALSE(CloudSave::ParseEnvelope(R"({"code":"200","data":{}})", &err));
 	EXPECT_FALSE(CloudSave::ParseEnvelope("not json", &err));
 	EXPECT_FALSE(CloudSave::ParseEnvelope("", &err));
 
@@ -271,6 +277,9 @@ static bool TestCloudSaveParseLists() {
 	EXPECT_TRUE(conflict.outcome == CloudSave::UploadOutcome::Conflict);
 	EXPECT_EQ_INT(conflict.latest.version, 7);
 	EXPECT_EQ_STR(conflict.latest.deviceName, std::string("iPad"));
+	// Success without a usable version must not be recorded as version 0.
+	CloudSave::UploadResult noVersion = CloudSave::ParseUpload(R"({"code":200,"data":null,"msg":""})");
+	EXPECT_TRUE(noVersion.outcome == CloudSave::UploadOutcome::Failed);
 	CloudSave::UploadResult tooBig = CloudSave::ParseUpload(R"({"code":413,"msg":"too large"})");
 	EXPECT_TRUE(tooBig.outcome == CloudSave::UploadOutcome::Failed);
 	EXPECT_EQ_INT(tooBig.error.code, 413);
@@ -296,6 +305,39 @@ static bool TestCloudSaveClientAlive() {
 	return true;
 }
 
+// A previous failed swap left the only copy of the old save in ".bak". Never delete it.
+static bool TestCloudSaveExtractKeepsOrphanBak() {
+	Path root = File::GetCurDirectory() / "unittest_cloudsave_orphanbak";
+	File::DeleteDirRecursively(root);
+	Path src = root / "src" / "ULUS10336DATA00";
+	WriteFile(src / "DATA.BIN", "new");
+	std::string zip;
+	EXPECT_TRUE(CloudSave::ZipSaveFolder(src, &zip));
+	Path dest = root / "SAVEDATA";
+	WriteFile(dest / "ULUS10336DATA00.bak" / "DATA.BIN", "only-copy");
+	std::string error;
+	EXPECT_FALSE(CloudSave::ExtractSaveZip(zip, dest, "ULUS10336DATA00", &error));
+	EXPECT_TRUE(error.find(".bak") != std::string::npos);
+	std::string data;
+	EXPECT_TRUE(File::ReadBinaryFileToString(dest / "ULUS10336DATA00.bak" / "DATA.BIN", &data));
+	EXPECT_EQ_STR(data, std::string("only-copy"));
+	File::DeleteDirRecursively(root);
+	return true;
+}
+
+// Decides whether a download must ask before replacing what is on disk right now.
+static bool TestCloudSaveOverwriteConfirm() {
+	using CloudSave::NeedsOverwriteConfirm;
+	const CloudSave::SyncBase base{3, "aaa"};
+	EXPECT_FALSE(NeedsOverwriteConfirm(false, true, "", base, "ccc"));   // nothing local
+	EXPECT_FALSE(NeedsOverwriteConfirm(true, true, "aaa", base, "ccc")); // local == last sync
+	EXPECT_FALSE(NeedsOverwriteConfirm(true, true, "ccc", base, "ccc")); // local == chosen version
+	EXPECT_TRUE(NeedsOverwriteConfirm(true, true, "bbb", base, "ccc"));  // unsynced local changes
+	EXPECT_TRUE(NeedsOverwriteConfirm(true, false, "", base, "ccc"));    // unreadable: ask
+	EXPECT_TRUE(NeedsOverwriteConfirm(true, true, "bbb", CloudSave::SyncBase{}, "ccc"));  // never synced
+	return true;
+}
+
 bool TestCloudSave() {
 	if (!TestCloudSaveHttpHeaders())
 		return false;
@@ -310,6 +352,10 @@ bool TestCloudSave() {
 	if (!TestCloudSaveExtractNotZip())
 		return false;
 	if (!TestCloudSaveStatus())
+		return false;
+	if (!TestCloudSaveExtractKeepsOrphanBak())
+		return false;
+	if (!TestCloudSaveOverwriteConfirm())
 		return false;
 	if (!TestCloudSaveStateFile())
 		return false;

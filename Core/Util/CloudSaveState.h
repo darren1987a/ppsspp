@@ -27,6 +27,11 @@ struct SyncBase {
 // cloudVersion == 0 means the cloud has no copy.
 SyncStatus ComputeStatus(bool hasLocal, const std::string &localSha256, const SyncBase &base, int cloudVersion, const std::string &cloudSha256);
 
+// True if a download must ask before replacing the save currently on disk: it exists and holds
+// changes that are neither the last synced version nor the version being downloaded, or it can't
+// be read. Decided from disk at confirm time, never from a cached status.
+bool NeedsOverwriteConfirm(bool localExists, bool localReadable, const std::string &localSha256, const SyncBase &base, const std::string &chosenSha256);
+
 struct SyncState {
 	std::string serverUrl = DEFAULT_SERVER_URL;
 	std::string username;

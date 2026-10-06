@@ -168,6 +168,12 @@ bool ExtractSaveZip(std::string_view zipData, const Path &savedataRoot, std::str
 	const Path tmpDir = savedataRoot / (id + ".cloudtmp");
 	const Path bakDir = savedataRoot / (id + ".bak");
 	const Path finalDir = savedataRoot / id;
+	if (File::Exists(bakDir) && !File::Exists(finalDir)) {
+		// An earlier swap failed halfway and ".bak" is the only copy of the old save. Don't touch it.
+		zip_discard(z);
+		*error = "An earlier download left your old save in " + id + ".bak. Rename it back to " + id + " first.";
+		return false;
+	}
 	File::DeleteDirRecursively(tmpDir);
 	File::CreateFullPath(tmpDir);
 
@@ -224,9 +230,11 @@ bool ExtractSaveZip(std::string_view zipData, const Path &savedataRoot, std::str
 		return false;
 	}
 	if (!File::Rename(tmpDir, finalDir)) {
-		if (hadOld)
-			File::Rename(bakDir, finalDir);
 		File::DeleteDirRecursively(tmpDir);
+		if (hadOld && !File::Rename(bakDir, finalDir)) {
+			*error = "Could not move the downloaded save into place. Your old save is in " + id + ".bak";
+			return false;
+		}
 		*error = "Could not move the downloaded save into place";
 		return false;
 	}

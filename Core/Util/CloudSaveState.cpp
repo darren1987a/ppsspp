@@ -21,6 +21,16 @@ SyncStatus ComputeStatus(bool hasLocal, const std::string &localSha256, const Sy
 	return SyncStatus::LocalNewer;
 }
 
+bool NeedsOverwriteConfirm(bool localExists, bool localReadable, const std::string &localSha256, const SyncBase &base, const std::string &chosenSha256) {
+	if (!localExists)
+		return false;
+	if (!localReadable)
+		return true;
+	if (localSha256 == chosenSha256)
+		return false;
+	return base.sha256.empty() || localSha256 != base.sha256;
+}
+
 bool SyncState::Load(const Path &file) {
 	std::string data;
 	if (!File::ReadTextFileToString(file, &data) || data.empty())

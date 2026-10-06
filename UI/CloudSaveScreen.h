@@ -24,6 +24,7 @@ private:
 		std::string saveId;
 		std::string title;
 		bool hasLocal = false;
+		bool localReadable = true;  // false: the folder exists but couldn't be zipped
 		std::string localSha256;
 		std::string localZip;  // kept so upload sends exactly what was hashed
 		CloudSave::CloudVersion cloudLatest;  // version 0 = not in the cloud
@@ -39,6 +40,7 @@ private:
 	void ChooseVersionAndDownload(const std::string &saveId);
 	void DownloadVersion(const std::string &saveId, const CloudSave::CloudVersion &version);
 	void LogOut();
+	bool DownloadNeedsConfirm(const std::string &saveId, const std::string &chosenSha256);
 
 	Path gamePath_;
 	std::string gameId_;
@@ -49,6 +51,7 @@ private:
 	std::vector<Row> rows_;
 	std::string message_;
 	bool loading_ = false;
+	int refreshGeneration_ = 0;  // ignores list replies from an older Refresh()
 
 	// Login form fields.
 	std::string username_;

@@ -23,16 +23,19 @@ static bool ReadEnvelope(const json::JsonGet &root, ApiError *err) {
 		return false;
 	}
 	const JsonNode *codeNode = root.get("code");
+	bool numericCode = false;
 	if (codeNode && codeNode->value.getTag() == JSON_NUMBER) {
 		err->code = (int)codeNode->value.toNumber();
+		numericCode = true;
 	} else if (codeNode && codeNode->value.getTag() == JSON_STRING) {
+		// Only the unknown-route reply uses a string code. Keep it for the message, never as success.
 		err->code = atoi(codeNode->value.toString());
 	}
 	err->message = root.getStringOr("msg", "");
 	if (err->message.empty())
 		err->message = root.getStringOr("message", "");
 	const bool hasPayload = root.get("data") != nullptr || root.get("token") != nullptr;
-	if (err->code == 200 && hasPayload) {
+	if (numericCode && err->code == 200 && hasPayload) {
 		err->message.clear();
 		return true;
 	}
@@ -117,8 +120,13 @@ UploadResult ParseUpload(const std::string &body) {
 	json::JsonReader reader(body.c_str(), body.size());
 	const json::JsonGet root = reader.root();
 	if (ReadEnvelope(root, &result.error)) {
-		result.outcome = UploadOutcome::Ok;
 		result.version = root.getDict("data").getInt("version", 0);
+		if (result.version > 0) {
+			result.outcome = UploadOutcome::Ok;
+		} else {
+			result.error.code = -1;
+			result.error.message = "Server didn't return the new version number";
+		}
 		return result;
 	}
 	if (result.error.code == 409) {
