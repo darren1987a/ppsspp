@@ -274,8 +274,8 @@ if(ANDROID)
 endif()
 
 # naett wraps a native HTTPS implementation per platform: WinHTTP on Windows, the Java
-# APIs on Android, NSURLSession on macOS, and libcurl elsewhere.
-if(WIN32 OR ANDROID OR (APPLE AND NOT IOS))
+# APIs on Android, NSURLSession on macOS and iOS, and libcurl elsewhere.
+if(WIN32 OR ANDROID OR APPLE)
 	# Nothing to do, these need no external library.
 elseif(UNIX AND NOT APPLE AND NOT LIBRETRO)
 	# We only need the curl headers at build time - libcurl itself is loaded with dlopen
