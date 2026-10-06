@@ -9,6 +9,7 @@
 #include "Common/File/FileUtil.h"
 #include "Common/File/Path.h"
 #include "Core/Util/CloudSaveZip.h"
+#include "Core/Util/CloudSaveState.h"
 
 #include "UnitTest.h"
 
@@ -166,6 +167,53 @@ static bool TestCloudSaveExtractNotZip() {
 	return true;
 }
 
+static bool TestCloudSaveStatus() {
+	using CloudSave::SyncStatus;
+	using CloudSave::ComputeStatus;
+	const CloudSave::SyncBase base{3, "aaa"};
+	const CloudSave::SyncBase noBase{};
+
+	EXPECT_TRUE(ComputeStatus(true, "aaa", base, 3, "aaa") == SyncStatus::Synced);
+	EXPECT_TRUE(ComputeStatus(true, "bbb", base, 3, "aaa") == SyncStatus::LocalNewer);
+	EXPECT_TRUE(ComputeStatus(true, "aaa", base, 4, "ccc") == SyncStatus::CloudNewer);
+	EXPECT_TRUE(ComputeStatus(true, "bbb", base, 4, "ccc") == SyncStatus::Conflict);
+	EXPECT_TRUE(ComputeStatus(true, "bbb", noBase, 0, "") == SyncStatus::LocalOnly);
+	EXPECT_TRUE(ComputeStatus(false, "", noBase, 2, "ccc") == SyncStatus::CloudOnly);
+	// Someone else uploaded the same bytes we have: nothing to do.
+	EXPECT_TRUE(ComputeStatus(true, "ccc", base, 4, "ccc") == SyncStatus::Synced);
+	// newDeviceDiffers: fresh device, its own save differs from the cloud's. Must ask, not overwrite.
+	EXPECT_TRUE(ComputeStatus(true, "bbb", noBase, 2, "ccc") == SyncStatus::Conflict);
+	return true;
+}
+
+static bool TestCloudSaveStateFile() {
+	Path file = File::GetCurDirectory() / "unittest_cloudsave_state.json";
+	File::Delete(file);
+
+	CloudSave::SyncState missing;
+	EXPECT_FALSE(missing.Load(file));
+	EXPECT_EQ_STR(missing.serverUrl, std::string(CloudSave::DEFAULT_SERVER_URL));
+
+	CloudSave::SyncState state;
+	state.serverUrl = "http://127.0.0.1:9001/api/v1";
+	state.username = "darren";
+	state.deviceName = "Darren \"Mac\"";  // needs escaping
+	state.bases["ULUS10336DATA00"] = {3, "aaa"};
+	state.bases["ULUS10336DATA01"] = {1, "bbb"};
+	EXPECT_TRUE(state.Save(file));
+
+	CloudSave::SyncState loaded;
+	EXPECT_TRUE(loaded.Load(file));
+	EXPECT_EQ_STR(loaded.serverUrl, state.serverUrl);
+	EXPECT_EQ_STR(loaded.username, state.username);
+	EXPECT_EQ_STR(loaded.deviceName, state.deviceName);
+	EXPECT_EQ_INT((int)loaded.bases.size(), 2);
+	EXPECT_EQ_INT(loaded.bases["ULUS10336DATA00"].version, 3);
+	EXPECT_EQ_STR(loaded.bases["ULUS10336DATA01"].sha256, std::string("bbb"));
+	File::Delete(file);
+	return true;
+}
+
 bool TestCloudSave() {
 	if (!TestCloudSaveHttpHeaders())
 		return false;
@@ -178,6 +226,10 @@ bool TestCloudSave() {
 	if (!TestCloudSaveExtractUnsafe())
 		return false;
 	if (!TestCloudSaveExtractNotZip())
+		return false;
+	if (!TestCloudSaveStatus())
+		return false;
+	if (!TestCloudSaveStateFile())
 		return false;
 	return true;
 }
