@@ -97,6 +97,8 @@ list(APPEND UISource
 	Store.cpp
 	UploadScreen.h
 	UploadScreen.cpp
+	CloudSaveScreen.h
+	CloudSaveScreen.cpp
 	CwCheatScreen.h
 	CwCheatScreen.cpp
 	FirmwareScreen.h

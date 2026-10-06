@@ -981,6 +981,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/GameInfoCache.cpp \
   $(SRC)/UI/GameScreen.cpp \
   $(SRC)/UI/UploadScreen.cpp \
+  $(SRC)/UI/CloudSaveScreen.cpp \
   $(SRC)/UI/ControlMappingScreen.cpp \
   $(SRC)/UI/GameSettingsScreen.cpp \
   $(SRC)/UI/DeveloperToolsScreen.cpp \
