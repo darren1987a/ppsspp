@@ -7,7 +7,7 @@
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
 #include "Common/UI/PopupScreens.h"
-#include "Common/UI/ScreenManager.h"
+#include "Common/UI/Screen.h"
 #include "Common/UI/View.h"
 #include "Common/UI/ViewGroup.h"
 #include "Core/Util/CloudSaveZip.h"

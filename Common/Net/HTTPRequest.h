@@ -135,7 +135,7 @@ public:
 		std::string_view mime,
 		const std::vector<std::pair<std::string, std::string>> &headers,
 		RequestFlags flags,
-		RequestCompletionCallback callback,
+		std::function<void(Request &)> callback,
 		std::string_view name = "");
 
 	// Drops finished downloads from the list.

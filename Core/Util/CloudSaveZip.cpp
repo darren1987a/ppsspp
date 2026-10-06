@@ -138,6 +138,20 @@ bool ZipSaveFolder(const Path &saveDir, std::string *zipData) {
 	return ok;
 }
 
+// Copy of PathUtil's HasParentDirComponent, which v1.20.4 doesn't have yet.
+static bool HasParentDirComponent(std::string_view path) {
+	for (size_t i = 0; i < path.size(); ) {
+		size_t end = path.find_first_of("/\\", i);
+		size_t len = end == std::string_view::npos ? path.size() - i : end - i;
+		if (len == 2 && path[i] == '.' && path[i + 1] == '.')
+			return true;
+		if (end == std::string_view::npos)
+			break;
+		i = end + 1;
+	}
+	return false;
+}
+
 static bool IsSafeEntryName(const std::string &name) {
 	if (name.empty() || name[0] == '/' || name[0] == '\\')
 		return false;
