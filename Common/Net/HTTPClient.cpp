@@ -358,6 +358,7 @@ int Client::SendRequestWithData(const char *method, const RequestParams &req, st
 		"Accept: %s\r\n"
 		"Connection: close\r\n"
 		"%s"
+		"%s"
 		"\r\n";
 
 	buffer.Printf(tpl,
@@ -365,7 +366,8 @@ int Client::SendRequestWithData(const char *method, const RequestParams &req, st
 		host_.c_str(),
 		userAgent_.c_str(),
 		req.acceptMime,
-		otherHeaders ? otherHeaders : "");
+		otherHeaders ? otherHeaders : "",
+		req.extraHeaders.c_str());
 	buffer.Append(data);
 	bool flushed = buffer.FlushSocket(sock(), dataTimeout_, progress->cancelled);
 	if (!flushed) {
@@ -565,6 +567,9 @@ int HTTPRequest::Perform(const std::string &url) {
 	}
 
 	RequestParams req(fileUrl.Resource(), acceptMime_);
+	for (const auto &[key, value] : headers_) {
+		req.extraHeaders += key + ": " + value + "\r\n";
+	}
 	if (method_ == RequestMethod::GET) {
 		return client.GET(req, &buffer_, responseHeaders_, &progress_);
 	} else {

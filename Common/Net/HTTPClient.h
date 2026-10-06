@@ -59,6 +59,8 @@ public:
 
 	std::string resource;
 	const char *acceptMime = "*/*";
+	// Extra request header lines, each ending in "\r\n". Sent as-is.
+	std::string extraHeaders;
 };
 
 class Client : public net::Connection {

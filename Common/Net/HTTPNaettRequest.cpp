@@ -29,6 +29,9 @@ void HTTPSRequest::Start() {
 	options.push_back(naettMethod(method_ == RequestMethod::GET ? "GET" : "POST"));
 	options.push_back(naettHeader("Accept", acceptMime_));
 	options.push_back(naettUserAgent(userAgent_.c_str()));
+	for (const auto &[key, value] : headers_) {
+		options.push_back(naettHeader(key.c_str(), value.c_str()));
+	}
 	if (!postMime_.empty()) {
 		options.push_back(naettHeader("Content-Type", postMime_.c_str()));
 	}

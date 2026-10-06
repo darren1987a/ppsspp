@@ -149,6 +149,28 @@ std::shared_ptr<Request> RequestManager::AsyncPostWithCallback(
 	return dl;
 }
 
+std::shared_ptr<Request> RequestManager::StartRequest(
+	RequestMethod method,
+	std::string_view url,
+	std::string_view body,
+	std::string_view mime,
+	const std::vector<std::pair<std::string, std::string>> &headers,
+	RequestFlags flags,
+	RequestCompletionCallback callback,
+	std::string_view name) {
+	std::shared_ptr<Request> dl = CreateRequest(method, url, body, mime, Path(), flags, nullptr, name);
+	if (!dl)
+		return dl;
+	if (!userAgent_.empty())
+		dl->SetUserAgent(userAgent_);
+	for (const auto &[key, value] : headers)
+		dl->AddHeader(key, value);
+	dl->SetCallback(callback);
+	newDownloads_.push_back(dl);
+	dl->Start();
+	return dl;
+}
+
 void RequestManager::Update() {
 	for (auto &iter : newDownloads_) {
 		downloads_.push_back(iter);
