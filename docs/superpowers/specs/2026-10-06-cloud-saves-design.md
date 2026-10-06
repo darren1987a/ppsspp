@@ -24,7 +24,9 @@ them. A mistaken upload can be rolled back. Nothing is overwritten silently.
 | Versions | Keep the last 10 versions per save; older ones are deleted on upload. |
 | Grouping | By game ID (first 9 characters of the save folder name). |
 | Sync | Manual upload / download only. No automatic sync. |
-| Token storage in app | `ppsspp.ini` (`[CloudSave]` section), not Keychain. |
+| Token storage in app | PPSSPP's existing secret file (`NativeSaveSecret("cloudsave")`, as RetroAchievements does), not Keychain and not `ppsspp.ini`. |
+| Sync state in app | Own JSON file `PSP/SYSTEM/cloudsave.json` (server URL, username, device name, per-save base). Avoids editing `Core/Config.cpp`, which upstream changes often. |
+| Hashing | sha256 of a deterministic, **uncompressed** (`ZIP_CM_STORE`) zip: entries sorted, fixed mtime, hidden files skipped. |
 | HTTP auth transport | `Authorization` header. PPSSPP's request layer gains custom header support. |
 
 Out of scope: auto sync, save states, web UI, server backups, multi-user, Keychain.
@@ -41,7 +43,22 @@ Out of scope: auto sync, save states, web UI, server backups, multi-user, Keycha
 
 Base URL: `https://dhservice.crazydarren.com/api/v1` (dev: `http://127.0.0.1:9001/api/v1`).
 TLS is terminated by Cloudflare (valid certificate verified 2026-10-06), so iOS ATS is satisfied.
-Responses use DHService's normal `app.OK` JSON envelope unless noted.
+### Response envelope (DHService convention, confirmed by the dhservice session)
+
+- JSON endpoints always answer **HTTP 200**. The real result is the in-body `code`.
+- Success: `{"code":200,"data":<any>,"msg":""}`. A list is a JSON array; the new handlers always
+  initialize slices so an empty list is `[]`, never `null` (the client still treats `null` as `[]`).
+- Error: `{"code":<int>,"msg":"<text>"}` (no `data` key). Codes used by the save endpoints:
+  `400` bad input, `401` missing/unknown/revoked token, `409` conflict, `413` too large.
+  The `409` response is written directly by the handler and **does** include
+  `data: {"latest": {...}}`.
+- `POST /login` (gin-jwt): success `{"code":200,"token":"<jwt>","expire":"<RFC3339>"}`;
+  failure `{"code":400,"message":"..."}` (key `message`, not `msg`). Bad/expired JWT: `code`
+  `401` or `6401`.
+- The zip download endpoint answers HTTP 200 with the raw zip on success. On error it answers the
+  JSON error envelope instead; the client tells them apart by the zip magic bytes `PK`.
+- Client rule: success = transport OK and `code == 200` and (`data` present or `token` present).
+  Error text = `msg`, falling back to `message`.
 
 ### Device management (admin JWT, `Authorization: Bearer <jwt>` from existing `POST /login`)
 
@@ -73,14 +90,15 @@ POST /saves/:saveId/versions[?force=1]
        X-Save-Title:  title from PARAM.SFO (UTF-8, URL-encoded), optional
        X-Save-Sha256: lowercase hex sha256 of the body, required
        X-Base-Version: integer, 0 if this device never synced this save, required
-     → 201 {version}
-     → 409 {latest: {version, sha256, deviceName, uploadedAt}}
+     → code 200, data {version}
+     → code 409, data {latest: {version, sha256, deviceName, uploadedAt}}
             when latest version > X-Base-Version and force is not set
-     → 400 bad saveId / hash mismatch / not a zip
-     → 413 body over 20 MB
+     → code 400 bad saveId / hash mismatch / not a zip
+     → code 413 body over 20 MB
 ```
 
-Common errors: `401` missing, unknown or revoked token.
+Common errors: code `401` for a missing, unknown or revoked token. (All codes are in-body; see
+the envelope section.)
 
 ## Backend (DHService, Go + Gin + GORM/MySQL)
 
@@ -117,19 +135,18 @@ Upload steps, in order:
 
 | File | Contents |
 |---|---|
-| `Core/CloudSave/CloudSaveClient.cpp/.h` | Async API calls (register, list game saves, list versions, upload, download). Uses `RequestManager`; callbacks run on the UI thread. Parses JSON with the existing JSON reader. |
-| `Core/CloudSave/SaveZip.cpp/.h` | Zip a save folder with libzip, compute sha256, unzip a download safely (see below). |
-| `Core/CloudSave/SaveSyncStatus.cpp/.h` | Pure function deciding local vs cloud status (see table). |
-| `UI/CloudSaveScreen.cpp/.h` | Per-game cloud saves screen. |
-| `UI/CloudSaveLoginScreen.cpp/.h` | One-time password prompt → `/login` → `/saves/devices` → store token. |
+| `Core/Util/CloudSaveZip.cpp/.h` | saveId validation, sha256 hex, deterministic zip of a save folder, safe extract with `.cloudtmp`/`.bak` swap. Reuses `HasParentDirComponent`. |
+| `Core/Util/CloudSaveState.cpp/.h` | Pure status decision (table below) and the `cloudsave.json` sync-state file. |
+| `Core/Util/CloudSaveClient.cpp/.h` | Async API calls (login+register, list game saves, list versions, upload, download) and envelope parsing. Uses `g_DownloadManager`; callbacks run on the UI thread. |
+| `UI/CloudSaveScreen.cpp/.h` | Per-game cloud saves screen, plus the login form shown when there is no token. |
+| `unittest/TestCloudSave.cpp` | Unit tests for the above (and the HTTP header plumbing). |
 
 ### Changes to upstream files
 
-- `Common/Net/HTTPRequest.h`, `HTTPNaettRequest.cpp`, `HTTPClient.cpp`: add
-  `Request::AddHeader(name, value)` and pass headers through both backends. Also allow reading the
-  response body on non-2xx results (needed for the 409 body), if it isn't already available.
-- `Core/Config.cpp/.h`: `[CloudSave]` section: `ServerURL` (default prod URL), `DeviceToken`,
-  `DeviceName` (default: system device name), and a map `saveId → {base version, base sha256}`.
+- `Common/Net/HTTPRequest.h/.cpp`, `HTTPNaettRequest.cpp`, `HTTPClient.h/.cpp`: custom request
+  headers in both backends, and a `RequestManager::StartRequest(...)` that takes them (the existing
+  helpers call `Start()` before a caller could add headers). Response bodies are already kept on
+  non-200 results in both backends.
 - `UI/GameScreen.cpp`: add a **Cloud Saves** button near **Delete Save Data**, shown only when the
   game has save data or the cloud may have some (always shown is acceptable).
 - Build lists: `CMakeLists.txt`, and the other build files `AGENTS.md` / `docs/HLEModules.md` say
@@ -150,7 +167,7 @@ Inputs: local folder exists?, local hash, base version, cloud latest version and
 | Cloud only | no local folder | ↓ Download |
 
 "Local unchanged since base" is tracked by also storing the hash of the version at the base in
-config (`saveId → {version, sha256}`).
+`cloudsave.json` (`saveId → {version, sha256}`).
 
 The local hash is the sha256 of a **deterministic zip**: files sorted by path, fixed timestamps,
 fixed compression. This makes equal folders give equal hashes on every device.
@@ -161,7 +178,7 @@ fixed compression. This makes equal folders give equal hashes on every device.
   For ⚠, asks first ("Cloud has a newer version from iPad (date). Upload anyway?"); yes → `force=1`.
 - **Download** (per save): shows the version list (device + date); default is latest.
   If the local save has changes not in the cloud (↑ or ⚠), asks before overwriting.
-- On success, update the base version/hash in config and refresh the list.
+- On success, update the base version/hash in `cloudsave.json` and refresh the list.
 - Not reachable during gameplay (button lives on GameScreen only).
 
 ### Safe unzip
