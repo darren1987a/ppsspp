@@ -2553,6 +2553,12 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Util/GameDB.h
 	Core/Util/PathUtil.cpp
 	Core/Util/PathUtil.h
+	Core/Util/CloudSaveZip.cpp
+	Core/Util/CloudSaveZip.h
+	Core/Util/CloudSaveState.cpp
+	Core/Util/CloudSaveState.h
+	Core/Util/CloudSaveClient.cpp
+	Core/Util/CloudSaveClient.h
 	Core/Util/PortManager.cpp
 	Core/Util/PortManager.h
 	Core/Util/BlockAllocator.cpp
