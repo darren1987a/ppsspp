@@ -2940,6 +2940,7 @@ bool TestIRPassSimplify();
 bool TestThreadManager();
 bool TestVFS();
 bool TestZipSlip();
+bool TestCloudSave();
 bool TestLzrc();
 bool TestMpegCsc();
 bool TestSplineTessellation();
@@ -3163,6 +3164,7 @@ TestItem availableTests[] = {
 	TEST_ITEM(Lang),
 	TEST_ITEM(CmdLine),
 	TEST_ITEM(ZipSlip),
+	TEST_ITEM(CloudSave),
 	TEST_ITEM(Lzrc),
 	TEST_ITEM(MpegCsc),
 	TEST_ITEM(SplineTessellation),

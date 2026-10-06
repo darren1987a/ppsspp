@@ -1371,6 +1371,7 @@ if(UNITTEST)
 		unittest/TestVertexJit.cpp
 		unittest/TestVFS.cpp
 		unittest/TestZipSlip.cpp
+		unittest/TestCloudSave.cpp
 		unittest/TestLzrc.cpp
 		unittest/TestMpegCsc.cpp
 		unittest/TestSplineTessellation.cpp

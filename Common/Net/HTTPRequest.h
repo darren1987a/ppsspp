@@ -3,6 +3,8 @@
 #include <string>
 #include <functional>
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "Common/File/Path.h"
 #include "Common/Net/NetBuffer.h"
@@ -40,6 +42,11 @@ public:
 
 	void SetUserAgent(std::string_view userAgent) {
 		userAgent_ = userAgent;
+	}
+
+	// Must be called before Start().
+	void AddHeader(std::string_view name, std::string_view value) {
+		headers_.emplace_back(std::string(name), std::string(value));
 	}
 
 	// NOTE: Completion callbacks (which these are) are deferred until RunCallback is called. This is so that
@@ -93,6 +100,7 @@ protected:
 	std::string name_;
 	const char *acceptMime_ = "*/*";
 	std::string userAgent_;
+	std::vector<std::pair<std::string, std::string>> headers_;
 	Path outfile_;
 	Buffer buffer_;
 	bool cancelled_ = false;
@@ -122,6 +130,17 @@ public:
 		std::string_view postMime, // Use postMime = "application/x-www-form-urlencoded" for standard form-style posts, such as used by retroachievements. For encoding form data manually we have MultipartFormDataEncoder.
 		RequestFlags flags,
 		RequestCompletionCallback completionCallback,
+		std::string_view name = "");
+
+	// General request with custom headers. body/mime are only used for POST.
+	std::shared_ptr<Request> StartRequest(
+		RequestMethod method,
+		std::string_view url,
+		std::string_view body,
+		std::string_view mime,
+		const std::vector<std::pair<std::string, std::string>> &headers,
+		RequestFlags flags,
+		RequestCompletionCallback callback,
 		std::string_view name = "");
 
 	// Drops finished downloads from the list.
