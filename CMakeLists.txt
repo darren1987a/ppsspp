@@ -279,7 +279,8 @@ else()
 	set(CoreLinkType STATIC)
 endif()
 
-if(NOT ANDROID AND NOT WIN32 AND (NOT APPLE OR IOS))
+# naett uses NSURLSession on both macOS and iOS.
+if(NOT ANDROID AND NOT WIN32 AND NOT APPLE)
 	set(HTTPS_NOT_AVAILABLE ON)
 endif()
 
