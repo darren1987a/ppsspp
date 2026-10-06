@@ -1674,6 +1674,8 @@ list(APPEND NativeAppSource
 	UI/Store.cpp
 	UI/UploadScreen.h
 	UI/UploadScreen.cpp
+	UI/CloudSaveScreen.h
+	UI/CloudSaveScreen.cpp
 	UI/CwCheatScreen.h
 	UI/CwCheatScreen.cpp
 	UI/InstallZipScreen.h

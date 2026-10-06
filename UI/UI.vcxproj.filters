@@ -135,6 +135,9 @@
     <ClCompile Include="UploadScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
+    <ClCompile Include="CloudSaveScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
     <ClCompile Include="MiscViews.cpp">
       <Filter>Views</Filter>
     </ClCompile>
@@ -280,6 +283,9 @@
       <Filter>ImDebugger</Filter>
     </ClInclude>
     <ClInclude Include="UploadScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="CloudSaveScreen.h">
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="MiscViews.h">

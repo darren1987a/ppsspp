@@ -48,6 +48,7 @@
 #include "UI/CwCheatScreen.h"
 #include "UI/EmuScreen.h"
 #include "UI/GameScreen.h"
+#include "UI/CloudSaveScreen.h"
 #include "UI/GameSettingsScreen.h"
 #include "UI/GameInfoCache.h"
 #include "UI/BaseScreens.h"
@@ -595,6 +596,13 @@ void GameScreen::CreateContextMenu(UI::ViewGroup *parent) {
 	if (info_->saveDataSize) {
 		Choice *btnDeleteSaveData = new Choice(ga->T("Delete Save Data"), ImageID("I_TRASHCAN"));
 		parent->Add(btnDeleteSaveData)->OnClick.Handle(this, &GameScreen::OnDeleteSaveData);
+	}
+
+	if (!inGame_ && (knownFlags_ & GameInfoFlags::PARAM_SFO)) {
+		Choice *btnCloudSaves = parent->Add(new Choice("Cloud Saves", ImageID("I_FOLDER")));
+		btnCloudSaves->OnClick.Add([this](UI::EventParams &) {
+			screenManager()->push(new CloudSaveScreen(gamePath_));
+		});
 	}
 
 	if (info_->pic1.texture) {

@@ -138,6 +138,7 @@
     <ClInclude Include="..\..\UI\TouchControlVisibilityScreen.h" />
     <ClInclude Include="..\..\UI\UIAtlas.h" />
     <ClInclude Include="..\..\UI\UploadScreen.h" />
+    <ClInclude Include="..\..\UI\CloudSaveScreen.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
@@ -197,6 +198,7 @@
     <ClCompile Include="..\..\UI\TouchControlVisibilityScreen.cpp" />
     <ClCompile Include="..\..\UI\UIAtlas.cpp" />
     <ClCompile Include="..\..\UI\UploadScreen.cpp" />
+    <ClCompile Include="..\..\UI\CloudSaveScreen.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
